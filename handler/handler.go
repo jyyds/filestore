@@ -10,7 +10,6 @@ import (
 
 	"github.com/jyyds/filestore/meta"
 	"github.com/jyyds/filestore/util"
-	"golang.org/x/tools/godoc/util"
 )
 
 // 处理文件上传
