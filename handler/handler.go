@@ -54,8 +54,10 @@ func UploadHandler(w http.ResponseWriter, r *http.Request) {
 		}
 		newFile.Seek(0, 0)
 		fileMeta.FileSha1 = util.FileSha1(newFile)
-		meta.UpdateFileMeta(fileMeta)
-		fmt.Println(fileMeta.FileSha1)
+		//meta.UpdateFileMeta(fileMeta)
+		fmt.Println(fileMeta.FileSha1, ".................................")
+		a := meta.UpdateFileMetaDB(fileMeta)
+		fmt.Println(fileMeta.FileSha1, a)
 
 		http.Redirect(w, r, "/file/upload/suc", http.StatusFound)
 	}
@@ -72,8 +74,14 @@ func GetFileMetaHandler(w http.ResponseWriter, r *http.Request) {
 	r.ParseForm()
 
 	filehash := r.Form["filehash"][0]
-	fMeat := meta.GetFileMeta(filehash)
-	data, err := json.Marshal(fMeat)
+	//fMeat := meta.GetFileMeta(filehash)
+	fMeta, err := meta.GetLastFileDB(filehash)
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+
+	data, err := json.Marshal(fMeta)
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		return
