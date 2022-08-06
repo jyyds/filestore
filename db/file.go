@@ -44,7 +44,7 @@ type TableFile struct {
 }
 
 // 从mysql获取文件元信息
-func GetFileMeta(filehash string) (*TableFile, error) {
+func GetFileMetaDB(filehash string) (*TableFile, error) {
 	stmt, err := mysql.DBConn().Prepare(
 		"select file_sha1,file_addr,file_name,file_size from tbl_file where file_sha1=? and status=1 limit 1",
 	)
@@ -56,7 +56,11 @@ func GetFileMeta(filehash string) (*TableFile, error) {
 
 	tfile := TableFile{}
 
-	stmt.QueryRow(filehash).Scan(&tfile.FileHash, &tfile.FileAddr, &tfile.FileName, &tfile.FileSzie)
+	err = stmt.QueryRow(filehash).Scan(&tfile.FileHash, &tfile.FileAddr, &tfile.FileName, &tfile.FileSzie)
+
+	if err == sql.ErrNoRows {
+		return nil, nil
+	}
 
 	if err != nil {
 		fmt.Println(err.Error())

@@ -36,9 +36,13 @@ func GetFileMeta(fileSha1 string) FileMeta {
 	return fileMetas[fileSha1]
 }
 
+func GetFileMetaDB(fileSha1 string) (*mydb.TableFile, error) {
+	return mydb.GetFileMetaDB(fileSha1)
+}
+
 // 从mysql获取文件元信息
 func GetLastFileDB(fileSha1 string) (FileMeta, error) {
-	tfile, err := mydb.GetFileMeta(fileSha1)
+	tfile, err := mydb.GetFileMetaDB(fileSha1)
 	if err != nil {
 		return FileMeta{}, err
 	}
