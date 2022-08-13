@@ -14,7 +14,11 @@ func main() {
 	http.HandleFunc("/file/download", handler.DownloadHandler)
 	http.HandleFunc("/file/update", handler.FileMetaUpdateHandler)
 	http.HandleFunc("/file/delete", handler.FileDeleteHandler)
+	// 秒传接口
 	http.HandleFunc("/file/fastupload", handler.HTTPInterceptor(handler.TryFastUploadHandler))
+
+	// 下载oss上文件的url
+	http.HandleFunc("/file/downloadurl", handler.HTTPInterceptor(handler.DownloadURLHandler))
 
 	// 分块上传接口
 	http.HandleFunc("/file/mpupload/init", handler.HTTPInterceptor(handler.InitialMultipartUploadHandler))

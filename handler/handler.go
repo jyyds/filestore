@@ -251,3 +251,16 @@ func TryFastUploadHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 }
+
+// 生成文件下载地址
+func DownloadURLHandler(w http.ResponseWriter, r *http.Request) {
+	r.ParseForm()
+	filehash := r.Form.Get("filehash")
+	// 从文件表查询记录
+	row, _ := dblayer.GetFileMetaDB(filehash)
+
+	// TODO : 判断文件存储OSS还是Ceph
+
+	signedURL := oss.DownloadURL(row.FileAddr.String)
+	w.Write([]byte(signedURL))
+}
