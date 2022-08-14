@@ -14,7 +14,7 @@ func Client() *oss.Client {
 	if ossCli != nil {
 		return ossCli
 	}
-	ossCli, err := oss.New(cfg.OSSEndpoint, cfg.OSSAccesskeyID, cfg.OSSAcessKetSecret)
+	ossCli, err := oss.New(cfg.OSSEndpoint, cfg.OSSAccesskeyID, cfg.OSSAccessKeySecret)
 	if err != nil {
 		fmt.Println(err.Error())
 		return nil

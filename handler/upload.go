@@ -10,8 +10,11 @@ import (
 	"strconv"
 	"time"
 
+	cmn "github.com/jyyds/filestore/common"
+	cfg "github.com/jyyds/filestore/config"
 	dblayer "github.com/jyyds/filestore/db"
 	"github.com/jyyds/filestore/meta"
+	"github.com/jyyds/filestore/mq"
 	"github.com/jyyds/filestore/store/oss"
 	"github.com/jyyds/filestore/util"
 )
@@ -66,15 +69,32 @@ func UploadHandler(w http.ResponseWriter, r *http.Request) {
 		// _ = bucket.Put(cephPath, data, "octet-stream", s3.PublicRead)
 		// fileMeta.Location = cephPath
 
+		// 文件写入oss存储
 		ossPath := "oss/" + fileMeta.FileSha1
-		err = oss.Bucket().PutObject(ossPath, newFile)
-		if err != nil {
-			fmt.Println(err.Error())
-			w.Write([]byte("Upload failed !"))
-			return
-		}
+		// err = oss.Bucket().PutObject(ossPath, newFile)
+		// if err != nil {
+		// 	fmt.Println(err.Error())
+		// 	w.Write([]byte("Upload failed !"))
+		// 	return
+		// }
 
-		fileMeta.Location = ossPath
+		// fileMeta.Location = ossPath
+
+		data := mq.TransferData{
+			FileHash:      fileMeta.FileSha1,
+			CurLocation:   fileMeta.Location,
+			DestLocation:  ossPath,
+			DestStoreType: cmn.StoreOSS,
+		}
+		pubData, _ := json.Marshal(data)
+		suc := mq.Puublish(
+			cfg.TransExchangeName,
+			cfg.TransOSSRoutingKey,
+			pubData,
+		)
+		if !suc {
+			// TODO : 加入重拾发送消息逻辑
+		}
 
 		//meta.UpdateFileMeta(fileMeta)
 		fmt.Println(fileMeta.FileSha1, ".................................")
@@ -84,7 +104,7 @@ func UploadHandler(w http.ResponseWriter, r *http.Request) {
 		// TODO 更新用户文件表
 		r.ParseForm()
 		username := r.Form.Get("username")
-		suc := dblayer.OnUserFileUploadFinshed(username, fileMeta.FileSha1, fileMeta.FileName, fileMeta.FileSize)
+		suc = dblayer.OnUserFileUploadFinshed(username, fileMeta.FileSha1, fileMeta.FileName, fileMeta.FileSize)
 		if suc {
 			http.Redirect(w, r, "/file/upload/suc", http.StatusFound)
 		} else {

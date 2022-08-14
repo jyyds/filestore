@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	"github.com/jyyds/filestore/db/mysql"
+	mydb "github.com/jyyds/filestore/db/mysql"
 )
 
 // 文件上传完成，保存mysql
@@ -67,4 +68,28 @@ func GetFileMetaDB(filehash string) (*TableFile, error) {
 		return nil, err
 	}
 	return &tfile, nil
+}
+
+// UpdateFileLocation : 更新文件的存储地址(如文件被转移了)
+func UpdateFileLocation(filehash string, fileaddr string) bool {
+	stmt, err := mydb.DBConn().Prepare(
+		"update tbl_file set`file_addr`=? where  `file_sha1`=? limit 1")
+	if err != nil {
+		fmt.Println("预编译sql失败, err:" + err.Error())
+		return false
+	}
+	defer stmt.Close()
+
+	ret, err := stmt.Exec(fileaddr, filehash)
+	if err != nil {
+		fmt.Println(err.Error())
+		return false
+	}
+	if rf, err := ret.RowsAffected(); nil == err {
+		if rf <= 0 {
+			fmt.Printf("更新文件location失败, filehash:%s", filehash)
+		}
+		return true
+	}
+	return false
 }
