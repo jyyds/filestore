@@ -10,15 +10,16 @@ import (
 	"strings"
 	"time"
 
+	"github.com/gin-gonic/gin"
 	"github.com/gomodule/redigo/redis"
-	"github.com/jyyds/filestore/util"
 
 	rPool "github.com/jyyds/filestore/cache/redis"
 	dblayer "github.com/jyyds/filestore/db"
 )
 
 // 初始化信息
-type MultipartUploadInfor struct {
+// MultipartUploadInfo : 初始化信息
+type MultipartUploadInfo struct {
 	FileHash   string
 	FileSize   int
 	UploadID   string
@@ -26,24 +27,28 @@ type MultipartUploadInfor struct {
 	ChunkCount int
 }
 
-// 初始化分块上传
-func InitialMultipartUploadHandler(w http.ResponseWriter, r *http.Request) {
+// InitialMultipartUploadHandler : 初始化分块上传
+func InitialMultipartUploadHandler(c *gin.Context) {
 	// 1. 解析用户请求参数
-	r.ParseForm()
-	username := r.Form.Get("username")
-	filehash := r.Form.Get("filehash")
-	filesize, err := strconv.Atoi(r.Form.Get("filesize"))
+	username := c.Request.FormValue("username")
+	filehash := c.Request.FormValue("filehash")
+	filesize, err := strconv.Atoi(c.Request.FormValue("filesize"))
 	if err != nil {
-		w.Write(util.NewRespMsg(-1, "params invalid", nil).JSONBytes())
+		c.JSON(
+			http.StatusOK,
+			gin.H{
+				"code": -1,
+				"msg":  "params invalid",
+			})
 		return
 	}
 
-	// 2. 获取redis的一个连接
+	// 2. 获得redis的一个连接
 	rConn := rPool.RedisPool().Get()
 	defer rConn.Close()
 
-	// 3  生成分块上传的初始化信息
-	upInfo := MultipartUploadInfor{
+	// 3. 生成分块上传的初始化信息
+	upInfo := MultipartUploadInfo{
 		FileHash:   filehash,
 		FileSize:   filesize,
 		UploadID:   username + fmt.Sprintf("%x", time.Now().UnixNano()),
@@ -57,34 +62,45 @@ func InitialMultipartUploadHandler(w http.ResponseWriter, r *http.Request) {
 	rConn.Do("HSET", "MP_"+upInfo.UploadID, "filesize", upInfo.FileSize)
 
 	// 5. 将响应初始化数据返回到客户端
-	w.Write(util.NewRespMsg(0, "OK", upInfo).JSONBytes())
+	c.JSON(
+		http.StatusOK,
+		gin.H{
+			"code": 0,
+			"msg":  "OK",
+			"data": upInfo,
+		})
 }
 
 // UploadPartHandler : 上传文件分块
-func UploadPartHandler(w http.ResponseWriter, r *http.Request) {
+func UploadPartHandler(c *gin.Context) {
 	// 1. 解析用户请求参数
-	r.ParseForm()
-	//	username := r.Form.Get("username")
-	uploadID := r.Form.Get("uploadid")
-	chunkIndex := r.Form.Get("index")
+	//	username := c.Request.FormValue("username")
+	uploadID := c.Request.FormValue("uploadid")
+	chunkIndex := c.Request.FormValue("index")
 
 	// 2. 获得redis连接池中的一个连接
 	rConn := rPool.RedisPool().Get()
 	defer rConn.Close()
 
 	// 3. 获得文件句柄，用于存储分块内容
-	fpath := "./data/" + uploadID + "/" + chunkIndex
+	fpath := "/data/" + uploadID + "/" + chunkIndex
 	os.MkdirAll(path.Dir(fpath), 0744)
 	fd, err := os.Create(fpath)
 	if err != nil {
-		w.Write(util.NewRespMsg(-1, "Upload part failed", nil).JSONBytes())
+		c.JSON(
+			http.StatusOK,
+			gin.H{
+				"code": 0,
+				"msg":  "Upload part failed",
+				"data": nil,
+			})
 		return
 	}
 	defer fd.Close()
 
 	buf := make([]byte, 1024*1024)
 	for {
-		n, err := r.Body.Read(buf)
+		n, err := c.Request.Body.Read(buf)
 		fd.Write(buf[:n])
 		if err != nil {
 			break
@@ -92,38 +108,41 @@ func UploadPartHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// 4. 更新redis缓存状态
-	_, err = rConn.Do("HSET", "MP_"+uploadID, "chkidx_"+chunkIndex, 1)
-	if err != nil {
-		fmt.Println(err)
-	}
+	rConn.Do("HSET", "MP_"+uploadID, "chkidx_"+chunkIndex, 1)
 
 	// 5. 返回处理结果到客户端
-	w.Write(util.NewRespMsg(0, "OK", nil).JSONBytes())
+	c.JSON(
+		http.StatusOK,
+		gin.H{
+			"code": 0,
+			"msg":  "OK",
+			"data": nil,
+		})
 }
 
-// 通知上传合并接口
-func CompleteUploadHandler(w http.ResponseWriter, r *http.Request) {
+// CompleteUploadHandler : 通知上传合并
+func CompleteUploadHandler(c *gin.Context) {
 	// 1. 解析请求参数
-	r.ParseForm()
-	upid := r.Form.Get("uploadid")
-	username := r.Form.Get("username")
-	filehash := r.Form.Get("filehash")
-	filesize, err := strconv.Atoi(r.Form.Get("filesize"))
-	if err != nil {
-		w.Write(util.NewRespMsg(-1, "params invalid", nil).JSONBytes())
-		return
-	}
-	filename := r.Form.Get("filename")
+	upid := c.Request.FormValue("uploadid")
+	username := c.Request.FormValue("username")
+	filehash := c.Request.FormValue("filehash")
+	filesize := c.Request.FormValue("filesize")
+	filename := c.Request.FormValue("filename")
 
-	// 2. 获取redis连接池中的一个连接
+	// 2. 获得redis连接池中的一个连接
 	rConn := rPool.RedisPool().Get()
 	defer rConn.Close()
 
-	// 3. 通过uploadid 查询redis并片段是否所有分块上传完成
-	data, err := redis.Values(rConn.Do("HGETADD", "MP_"+upid))
-
+	// 3. 通过uploadid查询redis并判断是否所有分块上传完成
+	data, err := redis.Values(rConn.Do("HGETALL", "MP_"+upid))
 	if err != nil {
-		w.Write(util.NewRespMsg(-1, "params invalid", nil).JSONBytes())
+		c.JSON(
+			http.StatusOK,
+			gin.H{
+				"code": -1,
+				"msg":  "OK",
+				"data": nil,
+			})
 		return
 	}
 	totalCount := 0
@@ -135,18 +154,33 @@ func CompleteUploadHandler(w http.ResponseWriter, r *http.Request) {
 			totalCount, _ = strconv.Atoi(v)
 		} else if strings.HasPrefix(k, "chkidx_") && v == "1" {
 			chunkCount++
-
 		}
 	}
 	if totalCount != chunkCount {
-		w.Write(util.NewRespMsg(-2, "invalid request", nil).JSONBytes())
+		c.JSON(
+			http.StatusOK,
+			gin.H{
+				"code": -2,
+				"msg":  "OK",
+				"data": nil,
+			})
 		return
 	}
-	// 4. TODO : 合成分块
+
+	// 4. TODO：合并分块
 
 	// 5. 更新唯一文件表及用户文件表
-	dblayer.OnFileUploadFinished(filehash, filename, int64(filesize), "")
-	dblayer.OnUserFileUploadFinshed(username, filehash, filename, int64(filesize))
-	// 6. 响应处理结束
-	w.Write(util.NewRespMsg(0, "OK", nil).JSONBytes())
+	fsize, _ := strconv.Atoi(filesize)
+	dblayer.OnFileUploadFinished(filehash, filename, int64(fsize), "")
+
+	dblayer.OnUserFileUploadFinished(username, filehash, filename, int64(fsize))
+
+	// 6. 响应处理结果
+	c.JSON(
+		http.StatusOK,
+		gin.H{
+			"code": 0,
+			"msg":  "OK",
+			"data": nil,
+		})
 }

@@ -2,160 +2,168 @@ package handler
 
 import (
 	"fmt"
-	"io/ioutil"
 	"net/http"
 	"time"
 
+	"github.com/gin-gonic/gin"
+	"github.com/jyyds/filestore/common"
 	dblayer "github.com/jyyds/filestore/db"
 	"github.com/jyyds/filestore/util"
 )
 
 const (
-	pwd_salt = "#890"
+	// 用于加密的盐值(自定义)
+	pwdSalt = "*#890"
 )
 
-// 处理用户注册
-func SignupHandler(w http.ResponseWriter, r *http.Request) {
-	if r.Method == http.MethodGet {
-		data, err := ioutil.ReadFile("./static/view/signup.html")
-		if err != nil {
-			w.WriteHeader(http.StatusInternalServerError)
-			return
-		}
+// SignupHandler : 响应注册页面
+func SignupHandler(c *gin.Context) {
+	c.Redirect(http.StatusFound, "/static/view/signup.html")
+}
 
-		w.Write(data)
-		return
-	}
+// DoSignupHandler : 处理注册post请求
+func DoSignupHandler(c *gin.Context) {
+	username := c.Request.FormValue("username")
+	passwd := c.Request.FormValue("password")
 
-	r.ParseForm()
-	username := r.Form.Get("username")
-	passwd := r.Form.Get("password")
-
+	// 校验用户名密码
 	if len(username) < 3 || len(passwd) < 5 {
-		w.Write([]byte("Invalid parameter"))
+		c.JSON(http.StatusOK, gin.H{
+			"msg":  "请求参数无效",
+			"code": common.StatusParamInvalid,
+		})
 		return
 	}
 
-	enc_passwd := util.Sha1([]byte(passwd + pwd_salt))
-	b := dblayer.UserSignup(username, enc_passwd)
-	if b {
-		w.Write([]byte("SUCCESS"))
+	// 对密码进行加盐及取Sha1值加密
+	encPasswd := util.Sha1([]byte(passwd + pwdSalt))
+	// 将用户信息注册到用户表中
+	suc := dblayer.UserSignup(username, encPasswd)
+	if suc {
+		c.JSON(http.StatusOK, gin.H{
+			"msg":  "注册成功",
+			"code": common.StatusOK,
+		})
+		return
 	} else {
-		w.Write([]byte("FAILED"))
+		c.JSON(http.StatusOK, gin.H{
+			"msg":  "注册失败",
+			"code": common.StatusRegisterFailed,
+		})
 	}
 }
 
-func HomeHandler(w http.ResponseWriter, r *http.Request) {
-	if r.Method == http.MethodGet {
-		data, err := ioutil.ReadFile("./static/view/home.html")
-		if err != nil {
-			w.WriteHeader(http.StatusInternalServerError)
-			return
-		}
-		w.Write(data)
-
-		return
-	}
+// SignInHandler : 响应登录页面
+func SignInHandler(c *gin.Context) {
+	c.Redirect(http.StatusFound, "/static/view/signin.html")
 }
 
-// 登录接口
-func SignInHandler(w http.ResponseWriter, r *http.Request) {
+// DoSignInHandler : 处理登录post请求
+func DoSignInHandler(c *gin.Context) {
+	username := c.Request.FormValue("username")
+	password := c.Request.FormValue("password")
 
-	if r.Method == http.MethodGet {
-		data, err := ioutil.ReadFile("./static/view/signin.html")
-		if err != nil {
-			w.WriteHeader(http.StatusInternalServerError)
-			return
-		}
-		w.Write(data)
+	encPasswd := util.Sha1([]byte(password + pwdSalt))
 
-		return
-	}
-
-	r.ParseForm()
-
-	username := r.Form.Get("username")
-	password := r.Form.Get("password")
-	encPasswd := util.Sha1([]byte(password + pwd_salt))
-	// 1.校验用户密码
+	// 1. 校验用户名及密码
 	pwdChecked := dblayer.UserSignin(username, encPasswd)
-
 	if !pwdChecked {
-		w.Write([]byte("FAILED"))
+		c.JSON(http.StatusOK, gin.H{
+			"msg":  "登录失败",
+			"code": common.StatusLoginFailed,
+		})
 		return
 	}
 
-	// 2.生成访问凭证token
-	token := GetToken(username)
+	// 2. 生成访问凭证(token)
+	token := GenToken(username)
 	upRes := dblayer.UpdateToken(username, token)
 	if !upRes {
-		w.Write([]byte("FAILED"))
+		c.JSON(http.StatusOK, gin.H{
+			"msg":  "登录失败",
+			"code": common.StatusLoginFailed,
+		})
 		return
 	}
 
-	// 3. 登录成功后重定向到首页
-	// w.Write([]byte("http://" + r.Host + "/static/view/home.html"))
-
+	// 3. 登录成功，返回用户信息
 	resp := util.RespMsg{
-		Code: 0,
-		Msg:  "OK",
+		Code: int(common.StatusOK),
+		Msg:  "登录成功",
 		Data: struct {
 			Location string
 			Username string
 			Token    string
 		}{
-			Location: "http://" + r.Host + "/user/home",
+			Location: "/static/view/home.html",
 			Username: username,
 			Token:    token,
 		},
 	}
-	w.Write(resp.JSONBytes())
+	c.Data(http.StatusOK, "application/json", resp.JSONBytes())
 }
 
-// 查询用户信息
-func UserInfoHandler(w http.ResponseWriter, r *http.Request) {
+// UserInfoHandler ： 查询用户信息
+func UserInfoHandler(c *gin.Context) {
 	// 1. 解析请求参数
-	r.ParseForm()
-	username := r.Form.Get("username")
-	//token := r.Form.Get("token")
-	// 2. 验证token是否有效
-	// isValidToken := IsTokenValid(username, token)
-	// if !isValidToken {
-	// 	w.WriteHeader(http.StatusForbidden)
-	// 	return
-	// }
+	username := c.Request.FormValue("username")
+	//	token := c.Request.FormValue("token")
 
-	// 3. 查询用户信息
+	// 2. 查询用户信息
 	user, err := dblayer.GetUserInfo(username)
 	if err != nil {
-		w.WriteHeader(http.StatusForbidden)
+		c.JSON(http.StatusForbidden,
+			gin.H{})
 		return
 	}
-	// 4. 组装并且响应用户数据
+
+	// 3. 组装并且响应用户数据
 	resp := util.RespMsg{
 		Code: 0,
 		Msg:  "OK",
 		Data: user,
 	}
-
-	w.Write(resp.JSONBytes())
+	c.Data(http.StatusOK, "application/json", resp.JSONBytes())
 }
 
-func GetToken(username string) string {
-	// 40 位字符： md5(username + timestamp + token_salt) + timestamp[:8]
-	ts := fmt.Sprintf("%v", time.Now().Unix)
+// UserExistsHandler ： 查询用户是否存在
+func UserExistsHandler(c *gin.Context) {
+	// 1. 解析请求参数
+	username := c.Request.FormValue("username")
+
+	// 3. 查询用户信息
+	exists, err := dblayer.UserExist(username)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError,
+			gin.H{
+				"code": common.StatusServerError,
+				"msg":  "server error",
+			})
+	} else {
+		c.JSON(http.StatusOK,
+			gin.H{
+				"code":   common.StatusOK,
+				"msg":    "ok",
+				"exists": exists,
+			})
+	}
+}
+
+// GenToken : 生成token
+func GenToken(username string) string {
+	// 40位字符:md5(username+timestamp+token_salt)+timestamp[:8]
+	ts := fmt.Sprintf("%x", time.Now().Unix())
 	tokenPrefix := util.MD5([]byte(username + ts + "_tokensalt"))
 	return tokenPrefix + ts[:8]
-
 }
 
-// 判断token是否有效
-func IsTokenValid(username, token string) bool {
+// IsTokenValid : token是否有效
+func IsTokenValid(token string) bool {
 	if len(token) != 40 {
 		return false
 	}
-	//TODO 判断token的时效性，是否过期
-	//TODO 从数据库表tbl_token查询username对应的token信息
-	//TODO 对比两个token是否一致
+	// TODO: 判断token的时效性，是否过期
+	// TODO: 从数据库表tbl_user_token查询username对应的token信息
+	// TODO: 对比两个token是否一致
 	return true
 }

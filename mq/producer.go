@@ -33,7 +33,7 @@ func initChannel() bool {
 }
 
 // 发布消息
-func Puublish(exchange, routingKey string, msg []byte) bool {
+func Publish(exchange, routingKey string, msg []byte) bool {
 	// 1.判断channel是否正常
 	if !initChannel() {
 		return false
