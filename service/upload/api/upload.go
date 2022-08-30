@@ -26,7 +26,7 @@ func DoUploadHandler(c *gin.Context) {
 	errCode := 0
 	defer func() {
 		c.Header("Access-Control-Allow-Origin", "*")
-		c.Header("Access-Control-Allow-Methods", "POST,OPTIONS")
+		c.Header("Access-Control-Allow-Methods", "POST,GET,OPTIONS")
 		if errCode < 0 {
 			c.JSON(http.StatusOK, gin.H{
 				"code": errCode,
