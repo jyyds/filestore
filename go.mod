@@ -84,6 +84,7 @@ require (
 require (
 	github.com/gomodule/redigo v1.8.9
 	github.com/json-iterator/go v1.1.12
+	github.com/micro/cli v0.2.0
 	github.com/streadway/amqp v1.0.0
 	gopkg.in/amz.v1 v1.0.0-20150111123259-ad23e96a31d2
 )
