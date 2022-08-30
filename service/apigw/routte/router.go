@@ -1,10 +1,11 @@
 package route
 
 import (
-	"filestore-server/assets"
-	"filestore-server/service/apigw/handler"
 	"net/http"
 	"strings"
+
+	"github.com/jyyds/filestore/assets"
+	"github.com/jyyds/filestore/service/apigw/handler"
 
 	"github.com/gin-gonic/contrib/static"
 	assetfs "github.com/moxiaomomo/go-bindata-assetfs"
