@@ -1,6 +1,6 @@
 package config
 
-const (
+var (
 	// AsyncTransferEnable : 是否开启文件异步转移(默认同步)
 	AsyncTransferEnable = true
 	// RabbitURL : rabbitmq服务的入口url
